@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEEPSCAN :: Cyberpunk Breach Intelligence</title>
+    <link rel="stylesheet" href="cyberpunk.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="matrix-bg"></div>
+
+<div class="container">
+    <!-- Header -->
+    <header class="cyber-header">
+        <div class="glitch-container">
+            <h1 class="glitch" data-text="DEEPSCAN">DEEPSCAN</h1>
+            <div class="subtitle">CYBERPUNK BREACH INTELLIGENCE</div>
+        </div>
+        <div class="system-stats">
+            <div class="stat">
+                <div class="stat-label">BREACHES MONITORED</div>
+                <div class="stat-value" id="totalBreaches">1,187,654,321</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">DEEPWEB SOURCES</div>
+                <div class="stat-value" id="deepwebSources">847</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">SYSTEM STATUS</div>
+                <div class="stat-value online">ONLINE</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Scanner -->
+    <main class="scanner-interface">
+        <div class="scan-panel">
+            <div class="panel-header">
+                <div class="panel-title">CREDENTIAL SCANNER</div>
+                <div class="status-led"></div>
+            </div>
+
+            <div class="input-group">
+                <label for="email">TARGET EMAIL</label>
+                <input type="email" id="email" class="cyber-input" placeholder="user@domain.com" required>
+            </div>
+
+            <div class="input-group">
+                <label for="password">CREDENTIAL TO SCAN</label>
+                <input type="password" id="password" class="cyber-input" placeholder="••••••••" required>
+            </div>
+
+            <div class="scan-options">
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="deepScan">
+                    <span class="checkmark"></span>
+                    DEEPWEB TOR CRAWL
+                </label>
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="enableTor">
+                    <span class="checkmark"></span>
+                    ENABLE REAL TOR (Requires Tor Browser)
+                </label>
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="continuousMonitor">
+                    <span class="checkmark"></span>
+                    CONTINUOUS MONITORING
+                </label>
+            </div>
+
+            <button id="scanBtn" class="cyber-button" onclick="initiateScan()">
+                <span class="btn-text">INITIATE SCAN</span>
+                <div class="btn-glow"></div>
+            </button>
+        </div>
+        <!-- Analytics Section -->
+        <div class="analytics-section">
+            <button id="analyticsBtn" class="cyber-button analytics-btn">
+                <span class="btn-text">ADD TO SERVER FOR ANALYTICS IMPROVEMENT</span>
+                <div class="btn-glow"></div>
+            </button>
+
+            <div id="analyticsResult" class="analytics-result hidden">
+                <div class="analytics-icon"></div>
+                <div class="analytics-message"></div>
+            </div>
+        </div>
+        <!-- Results Display -->
+        <div id="results" class="results-panel hidden">
+            <div class="panel-header">
+                <div class="panel-title">SCAN RESULTS</div>
+                <div class="timestamp" id="scanTime"></div>
+            </div>
+
+            <div class="risk-assessment">
+                <div class="risk-meter">
+                    <div class="risk-fill" id="riskFill"></div>
+                    <div class="risk-label" id="riskLabel">RISK LEVEL</div>
+                    <div class="risk-value" id="riskValue">0%</div>
+                </div>
+
+                <div class="threat-analysis">
+                    <h3>THREAT INTELLIGENCE</h3>
+                    <p id="threatText">ANALYZING CREDENTIALS...</p>
+                </div>
+            </div>
+
+            <div class="findings-section">
+                <h3>DEEPWEB FINDINGS</h3>
+                <div id="findingsList" class="findings-list">
+                    <!-- Findings will be populated here -->
+                </div>
+            </div>
+
+            <div class="recommendations">
+                <h3>COUNTERMEASURES</h3>
+                <div id="recommendations"></div>
+            </div>
+        </div>
+
+        <!-- Loading Animation -->
+        <div id="loading" class="loading-panel hidden">
+            <div class="scanning-animation">
+                <div class="radar"></div>
+                <div class="scan-line"></div>
+            </div>
+            <div class="loading-text">
+                <span class="cyber-text">SCANNING DEEPWEB SOURCES</span>
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+            <div class="tor-status">
+                <span class="status-indicator"></span>
+                TOR NETWORK: CONNECTED
+            </div>
+        </div>
+
+        <!-- Add this after the deepScan checkbox -->
+        <div class="scan-options">
+            <label class="cyber-checkbox">
+                <input type="checkbox" id="deepScan">
+                <span class="checkmark"></span>
+                DEEP WEB SCAN
+            </label>
+
+            <label class="cyber-checkbox">
+                <input type="checkbox" id="scanEmailOnly">
+                <span class="checkmark"></span>
+                SCAN EMAIL ONLY
+            </label>
+
+            <label class="cyber-checkbox">
+                <input type="checkbox" id="scanPasswordOnly">
+                <span class="checkmark"></span>
+                SCAN PASSWORD ONLY
+            </label>
+
+            <label class="cyber-checkbox">
+                <input type="checkbox" id="continuousMonitor">
+                <span class="checkmark"></span>
+                CONTINUOUS MONITORING
+            </label>
+        </div>
+
+    </main>
+
+    <!-- System Log -->
+    <div class="system-log">
+        <div class="log-header">SYSTEM LOG</div>
+        <div id="logContent" class="log-content">
+            <div class="log-entry">[SYSTEM] DEEPSCAN initialized</div>
+            <div class="log-entry">[NETWORK] TOR proxy activated</div>
+            <div class="log-entry">[DATABASE] Breach records loaded</div>
+        </div>
+    </div>
+    
+</div>
+
+<script src="matrix.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

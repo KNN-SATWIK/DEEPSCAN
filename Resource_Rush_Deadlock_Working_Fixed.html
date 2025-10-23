@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resource Rush: Deadlock Defense (AI Only)</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .game-header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            flex-shrink: 0;
+        }
+        .game-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 4px 0;
+            color: #fff;
+        }
+        .game-info {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0;
+        }
+        .game-description {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.9);
+            margin: 8px 0 0 0;
+            line-height: 1.4;
+        }
+        .game-engine {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 8px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        #gameContainer {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 0;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            max-width: 100vw;
+            max-height: 100vh;
+            width: auto;
+            height: auto;
+        }
+        body > canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+        }
+        .ludo-footer {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.7);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 11px;
+            text-decoration: none;
+            border-top-left-radius: 4px;
+            transition: all 0.2s ease;
+            z-index: 1000;
+        }
+        .ludo-footer:hover {
+            background: rgba(0, 0, 0, 0.9);
+            color: rgba(255, 255, 255, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-header">
+        <h1 class="game-title">Resource Rush: Deadlock Defense</h1>
+        
+        <p class="game-description">Resource Rush is a fast-paced 2D game where players manage bots competing to collect resources on a grid, while avoiding system deadlocks. The game simulates operating system concepts like mutual exclusion and deadlock detection, featuring dynamic resource ownership graphs and preemption power-ups.</p>
+        <p class="game-description"><strong>How to Play:</strong> Control bots to collect resources. Holding too many resources without releasing can cause deadlocks, leading to a 'SYSTEM HALTED' game over. Use the 'P' key or the PREEMPT button to activate preemption mode and click on a bot to force it to release a resource. Press 'R' to restart.</p>
+    </div>
+    <div id="gameContainer"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.3/pixi.min.js" integrity="sha512-o3fAFcbCbTTJRFRNx4vByRZVtdKYF9uklctNjDXrN1JjT00rJxCCyNJSDi35rPBEqzWvYplcHLlEmyW34Ado8A==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+</script><script src="https://cdn.jsdelivr.net/npm/pixi-filters@5.3.0/dist/browser/pixi-filters.min.js">
+
+</script>
+    <script type="module">
+       
+        // Generated on: 2025-10-05 (modified for AI-only movement)
+        // Engine: pixijs
+        // Title: Resource Rush: Deadlock Defense
+        
+        // Monitor for canvas elements and move them to gameContainer
+        const gameContainer = document.getElementById('gameContainer');
+        
+        // Function to move canvas elements to gameContainer
+        function moveCanvasToContainer() {
+            const canvases = document.querySelectorAll('body > canvas');
+            canvases.forEach(canvas => {
+                if (canvas.parentElement === document.body) {
+                    gameContainer.appendChild(canvas);
+                }
+            });
+        }
+        
+        // Monitor for new canvas elements
+        const observer = new MutationObserver(() => {
+            moveCanvasToContainer();
+        });
+        observer.observe(document.body, { childList: true });
+        
+        // Initial check
+        setTimeout(moveCanvasToContainer, 100);
+        
+        const CELL_SIZE = 56;
+const GRID_SIZE = 8;
+const GRID_OFFSET_X = 64;
+const GRID_OFFSET_Y = 64;
+const BOT_MOVE_INTERVAL = 0.4;
+const RESOURCE_SPAWN_INTERVAL = 2.2;
+const RESOURCE_TYPES = [
+  { key: 'A', color: 0x399dff, shape: 'square' },
+  { key: 'B', color: 0xff3a3a, shape: 'circle' },
+  { key: 'C', color: 0x3aff7a, shape: 'triangle' }
+];
+const BOT_TYPES = [
+  { color: 0xffe66d, shape: 'hexagon' },
+  { color: 0x41e3ff, shape: 'diamond' },
+  { color: 0xff5be7, shape: 'star' }
+];
+const MAX_RESOURCE_PER_TYPE = 5;
+const PROCESS_ANIM_TIME = 0.7;
+const PREEMPTION_COOLDOWN = 12;
+const POWERUP_ICON_SIZE = 48;
+class GridCell {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.occupied = false;
+    this.resource = null;
+    this.bot = null;
+    this.graphics = new PIXI.Graphics();
+    this.highlight = false;
+  }
+  draw() {
+    this.graphics.clear();
+    this.graphics.lineStyle(2, 0x444444, 1);
+    this.graphics.beginFill(this.highlight ? 0x555577 : 0x2a2a2a);
+    this.graphics.drawRect(0, 0, CELL_SIZE, CELL_SIZE);
+    this.graphics.endFill();
+    if (this.bot) {
+      this.graphics.lineStyle(3, 0xffff00, 0.22);
+      this.graphics.drawRect(0, 0, CELL_SIZE, CELL_SIZE);
+    }
+    if (this.resource) {
+      this.graphics.lineStyle(3, 0xffffff, 0.22);
+      this.graphics.drawRect(0, 0, CELL_SIZE, CELL_SIZE);
+    }
+  }
+}
+class Resource {
+  constructor(type, cell) {
+    this.type = type;
+    this.cell = cell;
+    this.heldBy = null;
+    this.sprite = new PIXI.Graphics();
+    this.attachOffset = Math.random() * Math.PI * 2;
+    this.visible = true;
+    this.draw();
+      this.waitCounter = 0; this.waitingSince = null;
+  }
+  draw() {
+    this.sprite.clear();
+    if (this.type.shape === 'square') {
+      this.sprite.beginFill(this.type.color);
+      this.sprite.drawRect(-14, -14, 28, 28);
+      this.sprite.endFill();
+    } else if (this.type.shape === 'circle') {
+      this.sprite.beginFill(this.type.color);
+      this.sprite.drawCircle(0, 0, 16);
+      this.sprite.endFill();
+    } else if (this.type.shape === 'triangle') {
+      this.sprite.beginFill(this.type.color);
+      this.sprite.drawPolygon([-16, 14, 0, -16, 16, 14]);
+      this.sprite.endFill();
+    }
+    if (this.heldBy) {
+      this.sprite.filters = [new PIXI.filters.GlowFilter({distance:4, outerStrength:2, color:0xffffff})];
+    } else {
+      this.sprite.filters = [];
+    }
+  }
+}
+class Bot {
+  constructor(type, cell, id, controlType="ai") {
+    this.controlType = controlType;
+    this.type = type;
+    this.cell = cell;
+    this.id = id;
+    this.target = null;
+    this.path = [];
+    this.heldResources = [];
+    this.waitingFor = null;
+    this.processing = false;
+    this.processTimer = 0;
+    this.sprite = new PIXI.Graphics();
+    this.waitPulse = 0;
+    this.draw();
+  }
+  draw() {
+    this.sprite.clear();
+    if (this.processing) {
+      this.sprite.beginFill(this.type.color, 1);
+      this.sprite.drawCircle(0, 0, 26);
+      this.sprite.endFill();
+      this.sprite.beginFill(0xffffff, 0.15 + 0.15 * Math.sin(Date.now() * 0.01));
+      this.sprite.drawCircle(0, 0, 32);
+      this.sprite.endFill();
+    } else if (this.type.shape === 'hexagon') {
+      this.sprite.beginFill(this.type.color);
+      const a = 22;
+      const pts = [];
+      for (let i = 0; i < 6; ++i) {
+        pts.push(Math.cos(Math.PI/3*i-Math.PI/6)*a, Math.sin(Math.PI/3*i-Math.PI/6)*a);
+      }
+      this.sprite.drawPolygon(pts);
+      this.sprite.endFill();
+    } else if (this.type.shape === 'diamond') {
+      this.sprite.beginFill(this.type.color);
+      this.sprite.drawPolygon([0,-24, 18,0, 0,24, -18,0]);
+      this.sprite.endFill();
+    } else if (this.type.shape === 'star') {
+      this.sprite.beginFill(this.type.color);
+      const pts = [];
+      for (let i = 0; i < 10; ++i) {
+        const r = i%2===0 ? 22 : 9;
+        pts.push(Math.cos(i*Math.PI/5-Math.PI/2)*r, Math.sin(i*Math.PI/5-Math.PI/2)*r);
+      }
+      this.sprite.drawPolygon(pts);
+      this.sprite.endFill();
+    }
+    if (this.waitingFor) {
+      const pulse = 0.6 + 0.4 * Math.sin(Date.now()*0.01 + this.id);
+      this.sprite.beginFill(0xffffff, 0.20 * pulse);
+      this.sprite.drawCircle(0, 0, 32);
+      this.sprite.endFill();
+    }
+    if (this.heldResources.length>0) {
+      this.sprite.lineStyle(3, 0xffffff, 0.4);
+      this.sprite.drawCircle(0, 0, 28);
+    }
+  }
+}
+class OwnershipGraph {
+  constructor(bots, resources) {
+    this.bots = bots;
+    this.resources = resources;
+    this.container = new PIXI.Container();
+    this.bg = new PIXI.Graphics();
+    this.container.addChild(this.bg);
+    this.nodeSprites = {};
+    this.edgeSprites = [];
+    this.cycleEdges = [];
+    this.width = 260;
+    this.height = 220;
+    this.x = 600;
+    this.y = 40;
+  }
+  updateGraph() {
+    this.bg.clear();
+    this.bg.beginFill(0x181826,0.92);
+    this.bg.drawRoundedRect(0,0,this.width,this.height,16);
+    this.bg.endFill();
+    for (const s of this.edgeSprites) this.container.removeChild(s);
+    this.edgeSprites.length=0;
+    for (const key in this.nodeSprites) this.container.removeChild(this.nodeSprites[key]);
+    this.nodeSprites={};
+    const botCount = this.bots.length;
+    const resCount = this.resources.length;
+    const nodePos = {};
+    for (let i=0; i<botCount; ++i) {
+      const angle = Math.PI*1.1 + (i/(botCount)) * Math.PI*0.8;
+      nodePos['B'+i] = [this.width/2+Math.cos(angle)*70, this.height/2+Math.sin(angle)*70];
+    }
+    let resTypeIdx = {};
+    for (let i=0; i<RESOURCE_TYPES.length; ++i) resTypeIdx[RESOURCE_TYPES[i].key]=i;
+    let typeResIdx = {};
+    for (let i=0; i<this.resources.length; ++i) {
+      const r = this.resources[i];
+      if (!typeResIdx[r.type.key]) typeResIdx[r.type.key]=0;
+      const idx = resTypeIdx[r.type.key];
+      const total = MAX_RESOURCE_PER_TYPE;
+      const angle = Math.PI*0.6 + idx*Math.PI*0.7 + (typeResIdx[r.type.key]/total)*Math.PI*0.2;
+      nodePos['R'+i] = [this.width/2+Math.cos(angle)*110, this.height/2+Math.sin(angle)*110];
+      typeResIdx[r.type.key]++;
+    }
+    for (let i=0; i<botCount; ++i) {
+      const [x,y]=nodePos['B'+i];
+      const g=new PIXI.Graphics();
+      g.beginFill(this.bots[i].type.color);
+      g.lineStyle(2,0x333333,1);
+      g.drawCircle(0,0,16);
+      g.endFill();
+      g.x=x;
+      g.y=y;
+      this.nodeSprites['B'+i]=g;
+      this.container.addChild(g);
+    }
+    for (let i=0; i<this.resources.length; ++i) {
+      const [x,y]=nodePos['R'+i];
+      const r=this.resources[i];
+      const g=new PIXI.Graphics();
+      g.beginFill(r.type.color);
+      if (r.type.shape==='square') g.drawRect(-13,-13,26,26);
+      else if (r.type.shape==='circle') g.drawCircle(0,0,14);
+      else if (r.type.shape==='triangle') g.drawPolygon([-13,11,0,-13,13,11]);
+      g.endFill();
+      g.lineStyle(2,0x333333,1);
+      if (r.type.shape==='square') g.drawRect(-13,-13,26,26);
+      else if (r.type.shape==='circle') g.drawCircle(0,0,14);
+      else if (r.type.shape==='triangle') g.drawPolygon([-13,11,0,-13,13,11]);
+      g.x=x; g.y=y;
+      this.nodeSprites['R'+i]=g;
+      this.container.addChild(g);
+    }
+    const edges=[];
+    for (let i=0; i<botCount; ++i) {
+      const bot=this.bots[i];
+      for (const res of bot.heldResources) {
+        const j=this.resources.indexOf(res);
+        if (j>=0) edges.push({from:'B'+i,to:'R'+j,type:'hold'});
+      }
+      if (bot.waitingFor) {
+        const j=this.resources.indexOf(bot.waitingFor);
+        if (j>=0) edges.push({from:'R'+j,to:'B'+i,type:'wait'});
+      }
+    }
+    const cycles = this.detectCycles(edges);
+    for (const e of edges) {
+      const from=nodePos[e.from],to=nodePos[e.to];
+      const g=new PIXI.Graphics();
+      if (e.type==='hold') {
+        g.lineStyle(2,0xffffff,1);
+      } else {
+        g.lineStyle(2,cycles.find(c=>c.some(ee=>(ee.from===e.from&&ee.to===e.to)))?0xff2b2b:0x6ddfff,1, [8,4]);
+      }
+      g.moveTo(from[0],from[1]);
+      const dx=to[0]-from[0],dy=to[1]-from[1],len=Math.sqrt(dx*dx+dy*dy);
+      const tx=from[0]+dx*0.7,ty=from[1]+dy*0.7;
+      g.lineTo(tx,ty);
+      this.container.addChild(g);
+      this.edgeSprites.push(g);
+      const ah=new PIXI.Graphics();
+      ah.beginFill(e.type==='hold'?0xffffff:(cycles.find(c=>c.some(ee=>(ee.from===e.from&&ee.to===e.to)))?0xff2b2b:0x6ddfff));
+      ah.drawPolygon([0,0,-5,14,5,14]);
+      ah.endFill();
+      const angle=Math.atan2(dy,dx);
+      ah.x=tx; ah.y=ty;
+      ah.rotation=angle+Math.PI/2;
+      this.container.addChild(ah);
+      this.edgeSprites.push(ah);
+    }
+  }
+  detectCycles(edges) {
+    const graph={};
+    for (const e of edges) {
+      if (!graph[e.from]) graph[e.from]=[];
+      graph[e.from].push({to:e.to,type:e.type});
+    }
+    const cycles=[];
+    const visited={},stack=[];
+    function dfs(node) {
+      if (stack.includes(node)) {
+        const idx=stack.indexOf(node);
+        const cyc=stack.slice(idx).map((n,i)=>({from:stack[idx+i],to:stack[idx+i+1]})).filter(e=>e.to);
+        cycles.push(cyc);
+        return;
+      }
+      if (visited[node]) return;
+      visited[node]=true; stack.push(node);
+      if (graph[node]) for (const n of graph[node]) dfs(n.to);
+      stack.pop();
+    }
+    for (const k in graph) dfs(k);
+    return cycles;
+  }
+}
+class PowerupUI {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.active = false;
+    this.cooldown = 0;
+    this.button = new PIXI.Graphics();
+    this.button.x = x;
+    this.button.y = y;
+    this.button.eventMode = 'static';
+    this.button.cursor = 'pointer';
+    this.text = new PIXI.Text('PREEMPT', {fontFamily:'monospace', fontSize:14, fill:0xffffff, align:'center'});
+    this.text.anchor.set(0.5);
+    this.text.x = x + POWERUP_ICON_SIZE/2;
+    this.text.y = y + POWERUP_ICON_SIZE + 14;
+    this.cooldownText = new PIXI.Text('', {fontFamily:'monospace', fontSize:15, fill:0xff5555, align:'center'});
+    this.cooldownText.anchor.set(0.5);
+    this.cooldownText.x = x+POWERUP_ICON_SIZE/2;
+    this.cooldownText.y = y + POWERUP_ICON_SIZE/2;
+    this.draw();
+  }
+  draw() {
+    this.button.clear();
+    if (this.active) {
+      this.button.beginFill(0xfff100);
+      this.button.lineStyle(4,0xfff100,1);
+    } else if (this.cooldown>0) {
+      this.button.beginFill(0x444444);
+      this.button.lineStyle(3,0xff4444,1);
+    } else {
+      this.button.beginFill(0x00c6ff);
+      this.button.lineStyle(3,0xffffff,1);
+    }
+    this.button.drawCircle(POWERUP_ICON_SIZE/2, POWERUP_ICON_SIZE/2, POWERUP_ICON_SIZE/2-2);
+    this.button.endFill();
+    this.button.lineStyle(0);
+    this.button.beginFill(0xffffff);
+    this.button.drawPolygon([
+      POWERUP_ICON_SIZE/2-7, POWERUP_ICON_SIZE/2+12,
+      POWERUP_ICON_SIZE/2, POWERUP_ICON_SIZE/2-18,
+      POWERUP_ICON_SIZE/2+7, POWERUP_ICON_SIZE/2+12
+    ]);
+    this.button.endFill();
+    this.cooldownText.text = this.cooldown>0 ? Math.ceil(this.cooldown) : '';
+  }
+}
+class Game {
+  constructor() {
+    this.state = 'play';
+    this.score = 0;
+    this.grid = [];
+    this.resources = [];
+    this.bots = [];
+    this.botMoveTimer = 0;
+    this.resourceSpawnTimer = 0;
+    this.selectedBot = null;
+    this.preemptionActive = false;
+    this.preemptionCooldown = 0;
+    this.preemptionUI = null;
+    this.ownershipGraph = null;
+    this.processingBots = [];
+    this.app = app;
+    this.setupContainers();
+    this.setupGrid();
+    this.setupResources();
+    this.setupBots();
+    this.setupUI();
+    this.setupOwnershipGraph();
+    this.setupEvents();
+    this.gameOverOverlay = null;
+    this.restartButton = null;
+    this.gameOverText = null;
+      this.deadlockDetectedAt = null;
+    this.updateOwnershipGraph();
+  }
+  setupContainers() {
+    this.gameContainer = new PIXI.Container();
+    this.gridContainer = new PIXI.Container();
+    this.resourceContainer = new PIXI.Container();
+    this.botContainer = new PIXI.Container();
+    this.uiContainer = new PIXI.Container();
+    this.app.stage.addChild(this.gameContainer);
+    this.gameContainer.addChild(this.gridContainer);
+    this.gameContainer.addChild(this.resourceContainer);
+    this.gameContainer.addChild(this.botContainer);
+    this.app.stage.addChild(this.uiContainer);
+  }
+  setupGrid() {
+    for (let y=0; y<GRID_SIZE; ++y) {
+      this.grid[y]=[];
+      for (let x=0; x<GRID_SIZE; ++x) {
+        const cell = new GridCell(x, y);
+        cell.graphics.x = GRID_OFFSET_X + x*CELL_SIZE;
+        cell.graphics.y = GRID_OFFSET_Y + y*CELL_SIZE;
+        this.gridContainer.addChild(cell.graphics);
+        this.grid[y][x]=cell;
+      }
+    }
+  }
+  getEmptyCells() {
+    const arr=[];
+    for (let y=0; y<GRID_SIZE; ++y)
+      for (let x=0; x<GRID_SIZE; ++x)
+        if (!this.grid[y][x].resource && !this.grid[y][x].bot) arr.push(this.grid[y][x]);
+    return arr;
+  }
+  setupResources() {
+    for (let i=0; i<RESOURCE_TYPES.length; ++i) {
+      for (let j=0; j<MAX_RESOURCE_PER_TYPE; ++j) {
+        const cell = this.getEmptyCells()[Math.floor(Math.random()*this.getEmptyCells().length)];
+        const res = new Resource(RESOURCE_TYPES[i], cell);
+        cell.resource = res;
+        res.sprite.x = cell.graphics.x + CELL_SIZE/2;
+        res.sprite.y = cell.graphics.y + CELL_SIZE/2;
+        this.resourceContainer.addChild(res.sprite);
+        this.resources.push(res);
+      }
+    }
+  }
+  setupBots() {
+    // Player 1 bot (WASD)
+    let cell1;
+    do { cell1 = this.grid[Math.floor(Math.random()*GRID_SIZE)][Math.floor(Math.random()*GRID_SIZE)]; }
+    while (cell1.bot || cell1.resource);
+    const bot1 = new Bot(BOT_TYPES[0], cell1, 0, "player1");
+    cell1.bot = bot1;
+    bot1.sprite.x = cell1.graphics.x + CELL_SIZE/2;
+    bot1.sprite.y = cell1.graphics.y + CELL_SIZE/2;
+    this.botContainer.addChild(bot1.sprite);
+    this.bots.push(bot1);
+
+    // Player 2 bot (Arrow Keys)
+    let cell2;
+    do { cell2 = this.grid[Math.floor(Math.random()*GRID_SIZE)][Math.floor(Math.random()*GRID_SIZE)]; }
+    while (cell2.bot || cell2.resource);
+    const bot2 = new Bot(BOT_TYPES[1], cell2, 1, "player2");
+    cell2.bot = bot2;
+    bot2.sprite.x = cell2.graphics.x + CELL_SIZE/2;
+    bot2.sprite.y = cell2.graphics.y + CELL_SIZE/2;
+    this.botContainer.addChild(bot2.sprite);
+    this.bots.push(bot2);
+
+    // AI bot
+    let cell3;
+    do { cell3 = this.grid[Math.floor(Math.random()*GRID_SIZE)][Math.floor(Math.random()*GRID_SIZE)]; }
+    while (cell3.bot || cell3.resource);
+    const bot3 = new Bot(BOT_TYPES[2], cell3, 2, "ai");
+    cell3.bot = bot3;
+    bot3.sprite.x = cell3.graphics.x + CELL_SIZE/2;
+    bot3.sprite.y = cell3.graphics.y + CELL_SIZE/2;
+    this.botContainer.addChild(bot3.sprite);
+    this.bots.push(bot3);
+  }
+
+  setupUI() {
+    this.scoreText = new PIXI.Text('Score: 0', {fontFamily:'monospace', fontSize: 28, fill: 0xffffff});
+    this.scoreText.x = 36;
+    this.scoreText.y = 12;
+    this.uiContainer.addChild(this.scoreText);
+    this.preemptionUI = new PowerupUI(360, 12);
+    this.uiContainer.addChild(this.preemptionUI.button);
+    this.uiContainer.addChild(this.preemptionUI.text);
+    this.uiContainer.addChild(this.preemptionUI.cooldownText);
+  }
+  setupOwnershipGraph() {
+    this.ownershipGraph = new OwnershipGraph(this.bots, this.resources);
+    this.ownershipGraph.container.x = 590;
+    this.ownershipGraph.container.y = 24;
+    this.uiContainer.addChild(this.ownershipGraph.container);
+  }
+  updateOwnershipGraph() {
+    this.ownershipGraph.updateGraph();
+  }
+  setupEvents() {
+    this.preemptionUI.button.on('pointerdown', ()=>{
+      if (this.preemptionCooldown<=0 && !this.preemptionActive && this.state==='play') {
+        this.preemptionActive = true;
+        this.preemptionUI.active = true;
+        this.preemptionUI.draw();
+        this.app.renderer.view.style.cursor = 'crosshair';
+      }
+    });
+    this.botContainer.eventMode = 'static';
+    this.botContainer.on('pointerdown', (e)=>{
+      if (!this.preemptionActive || this.preemptionCooldown>0 || this.state!=='play') return;
+      const pos = e.data.getLocalPosition(this.botContainer);
+      for (const bot of this.bots) {
+        const bx = bot.sprite.x, by = bot.sprite.y;
+        if (Math.abs(pos.x-bx)<32 && Math.abs(pos.y-by)<32 && bot.heldResources.length>0) {
+          this.preemptBot(bot);
+          break;
+        }
+      }
+    });
+    window.addEventListener('keydown', (e)=>{
+      // Player 1 controls (WASD)
+      if (this.bots[0] && this.bots[0].controlType === "player1") {
+        if (e.key === "w" || e.key === "W") this.tryMove(this.bots[0], 0, -1);
+        if (e.key === "s" || e.key === "S") this.tryMove(this.bots[0], 0, 1);
+        if (e.key === "a" || e.key === "A") this.tryMove(this.bots[0], -1, 0);
+        if (e.key === "d" || e.key === "D") this.tryMove(this.bots[0], 1, 0);
+      }
+      // Player 2 controls (Arrow keys)
+      if (this.bots[1] && this.bots[1].controlType === "player2") {
+        if (e.key === "ArrowUp") this.tryMove(this.bots[1], 0, -1);
+        if (e.key === "ArrowDown") this.tryMove(this.bots[1], 0, 1);
+        if (e.key === "ArrowLeft") this.tryMove(this.bots[1], -1, 0);
+        if (e.key === "ArrowRight") this.tryMove(this.bots[1], 1, 0);
+      }
+      if (e.key==='p' || e.key==='P') {
+        if (this.preemptionCooldown<=0 && !this.preemptionActive && this.state==='play') {
+          this.preemptionActive = true;
+          this.preemptionUI.active = true;
+          this.preemptionUI.draw();
+          this.app.renderer.view.style.cursor = 'crosshair';
+        }
+      }
+      if (e.key==='r' || e.key==='R') {
+        if (this.state==='gameover') this.restartGame();
+      }
+    });
+  }
+  update(delta) {
+    if (this.state==='play') {
+      // Auto-acquire: if a bot was waiting for a resource and it became free, let them pick it up
+      for (const bot of this.bots) {
+        if (bot.waitingFor && !bot.waitingFor.heldBy) {
+          this.acquireResource(bot, bot.waitingFor);
+          bot.waitingFor = null;
+          bot.waitingSince = null;
+          bot.waitCounter = 0;
+        }
+      }
+
+      this.botMoveTimer += delta/60;
+      this.resourceSpawnTimer += delta/60;
+      if (this.botMoveTimer >= BOT_MOVE_INTERVAL) {
+        this.botMoveTimer = 0;
+        this.updateBots();
+      }
+      if (this.resourceSpawnTimer >= RESOURCE_SPAWN_INTERVAL) {
+        this.resourceSpawnTimer = 0;
+        this.spawnResources();
+      }
+      if (this.preemptionCooldown>0) {
+        this.preemptionCooldown -= delta/60;
+        if (this.preemptionCooldown<=0) {
+          this.preemptionCooldown=0;
+          this.preemptionUI.cooldown=0;
+          this.preemptionUI.draw();
+        } else {
+          this.preemptionUI.cooldown=this.preemptionCooldown;
+          this.preemptionUI.draw();
+        }
+      }
+      for (const bot of this.bots) {
+        if (bot.processing) {
+          bot.processTimer += delta/60;
+          if (bot.processTimer>=PROCESS_ANIM_TIME) {
+            this.finishProcessing(bot);
+          }
+        }
+      }
+      this.updateSprites();
+      this.updateOwnershipGraph();
+      this.checkDeadlock();
+
+      // If a deadlock was detected, wait for 3 seconds before halting (gives chance for preemption)
+      if (this.deadlockDetectedAt) {
+        if (performance.now() - this.deadlockDetectedAt >= 3000) {
+          this.triggerGameOver();
+          return;
+        }
+      }
+    }
+  }
+  updateSprites() {
+    for (let y=0; y<GRID_SIZE; ++y)
+      for (let x=0; x<GRID_SIZE; ++x)
+        this.grid[y][x].draw();
+    for (const r of this.resources) {
+      if (!r.heldBy && r.cell) {
+        r.sprite.x = r.cell.graphics.x + CELL_SIZE/2;
+        r.sprite.y = r.cell.graphics.y + CELL_SIZE/2;
+        r.sprite.visible = true;
+      }
+      r.draw();
+    }
+    for (const bot of this.bots) {
+      if (bot.cell) {
+        bot.sprite.x = bot.cell.graphics.x + CELL_SIZE/2;
+        bot.sprite.y = bot.cell.graphics.y + CELL_SIZE/2;
+      }
+      if (bot.heldResources.length>0) {
+        for (let i=0; i<bot.heldResources.length; ++i) {
+          const res = bot.heldResources[i];
+          res.sprite.x = bot.sprite.x + 32*Math.cos(i*Math.PI*2/3 + Date.now()*0.002 + bot.id);
+          res.sprite.y = bot.sprite.y + 32*Math.sin(i*Math.PI*2/3 + Date.now()*0.002 + bot.id);
+          res.sprite.visible = true;
+        }
+      }
+      bot.draw();
+    }
+    this.scoreText.text = 'Score: '+this.score;
+    this.preemptionUI.draw();
+  }
+  updateBots() {
+    // IMPORTANT: only update bots that are AI-controlled.
+    for (const bot of this.bots) {
+      if (bot.controlType !== 'ai') continue; // <-- skip player-controlled bots
+
+      if (bot.processing) continue;
+      if (bot.heldResources.length===2) {
+        bot.processing = true;
+        bot.processTimer = 0;
+        continue;
+      }
+      if (bot.waitingFor) {
+        const res = bot.waitingFor;
+        if (!res.heldBy) {
+          this.acquireResource(bot, res);
+          bot.waitingFor = null;
+        } else {
+          bot.waitPulse+=1;
+          continue;
+        }
+      }
+      if (bot.heldResources.length===1) {
+        const wantType = RESOURCE_TYPES.find(t=>t.key!==bot.heldResources[0].type.key);
+        let targetRes = this.resources.find(r=>r.type.key!==bot.heldResources[0].type.key && !r.heldBy && r.cell);
+        if (targetRes) {
+          bot.target = targetRes;
+          bot.path = this.findPath(bot.cell, targetRes.cell, true);
+          if (bot.path && bot.path.length>0) {
+            this.moveBot(bot, bot.path[0]);
+          } else {
+            // fallback: random adjacent move to try to break congestion
+            this.randomStep(bot);
+          }
+        } else {
+          bot.target = null;
+          this.randomStep(bot);
+        }
+      } else if (bot.heldResources.length===0) {
+        let targetRes = this.resources.find(r=>!r.heldBy && r.cell);
+        if (targetRes) {
+          bot.target = targetRes;
+          bot.path = this.findPath(bot.cell, targetRes.cell, true);
+          if (bot.path && bot.path.length>0) {
+            this.moveBot(bot, bot.path[0]);
+          } else {
+            // no path found, try random step
+            this.randomStep(bot);
+          }
+        } else {
+          bot.target = null;
+          this.randomStep(bot);
+        }
+      }
+    }
+  }
+
+  // small helper: random step to prevent stuck AI when path is blocked
+  randomStep(bot) {
+    const dirs = this.getNeighbors(bot.cell).filter(n=>!n.bot);
+    if (dirs.length>0) {
+      const pick = dirs[Math.floor(Math.random()*dirs.length)];
+      this.moveBot(bot, pick);
+    }
+  }
+
+  moveBot(bot, cell) {
+    if (cell.bot) return;
+    bot.cell.bot = null;
+    bot.cell = cell;
+    cell.bot = bot;
+    if (cell.resource && !cell.resource.heldBy) {
+      this.acquireResource(bot, cell.resource);
+    }
+  }
+  acquireResource(bot, res) {
+    if (res.heldBy) {
+      bot.waitingFor = res;
+      return;
+    }
+    if (bot.heldResources.find(r=>r.type.key===res.type.key)) return;
+    res.heldBy = bot;
+    if (res.cell) res.cell.resource = null;
+    res.cell = null;
+    bot.heldResources.push(res);
+    bot.waitingFor = null;
+    // clear any waiting counters since the bot successfully acquired the resource
+    bot.waitCounter = 0;
+    bot.waitingSince = null;
+  }
+  finishProcessing(bot) {
+    this.score += 1;
+    for (const res of bot.heldResources) {
+      res.heldBy = null;
+      let cell = this.getEmptyCells()[Math.floor(Math.random()*this.getEmptyCells().length)];
+      if (cell) {
+        res.cell = cell;
+        cell.resource = res;
+      } else {
+        res.cell = null;
+      }
+    }
+    bot.heldResources = [];
+    bot.processing = false;
+    bot.processTimer = 0;
+  }
+  preemptBot(bot) {
+    if (!bot.heldResources.length) return;
+    let res;
+    if (bot.waitingFor && bot.heldResources.length>1) {
+      res = bot.heldResources.find(r=>r.type.key!==bot.waitingFor.type.key);
+    }
+    if (!res) res = bot.heldResources[Math.floor(Math.random()*bot.heldResources.length)];
+    res.heldBy = null;
+    let cell = this.getEmptyCells()[Math.floor(Math.random()*this.getEmptyCells().length)];
+    if (cell) {
+      res.cell = cell;
+      cell.resource = res;
+    } else {
+      res.cell = null;
+    }
+    bot.heldResources = bot.heldResources.filter(r=>r!==res);
+    bot.waitingFor = null;
+    this.preemptionActive = false;
+      this.preemptionCooldown = PREEMPTION_COOLDOWN;
+      this.preemptionUI.active = false;
+      this.preemptionUI.cooldown = this.preemptionCooldown;
+      this.preemptionUI.draw();
+      this.app.renderer.view.style.cursor = '';
+      // cancel any pending deadlock halt (preemption resolved it)
+      this.deadlockDetectedAt = null;
+  }
+  spawnResources() {
+    for (let i=0; i<RESOURCE_TYPES.length; ++i) {
+      const type = RESOURCE_TYPES[i];
+      const active = this.resources.filter(r=>r.type.key===type.key && r.cell && !r.heldBy).length;
+      if (active<MAX_RESOURCE_PER_TYPE) {
+        let cell = this.getEmptyCells()[Math.floor(Math.random()*this.getEmptyCells().length)];
+        if (cell) {
+          let res = this.resources.find(r=>r.type.key===type.key && !r.cell && !r.heldBy);
+          if (res) {
+            res.cell = cell;
+            cell.resource = res;
+          }
+        }
+      }
+    }
+  }
+  findPath(startCell, endCell, avoidBots) {
+    const queue = [{ cell: startCell, path: [] }];
+    const visited = new Set();
+    visited.add(startCell);
+    while (queue.length > 0) {
+      const { cell: currentCell, path: currentPath } = queue.shift();
+      if (currentCell === endCell) {
+        return currentPath;
+      }
+      const neighbors = this.getNeighbors(currentCell);
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          // If avoiding bots, ensure the neighbor cell is not occupied by another bot
+          if (avoidBots && neighbor.bot && neighbor.bot !== startCell.bot) {
+            continue;
+          }
+          // If the target is a resource cell, the bot can move onto it even if it has a resource
+          // The bot will acquire the resource upon moving to the cell.
+          if (neighbor.resource && neighbor !== endCell) {
+            continue;
+          }
+          visited.add(neighbor);
+          queue.push({ cell: neighbor, path: [...currentPath, neighbor] });
+        }
+      }
+    }
+    return []; // No path found
+  }
+  getNeighbors(cell) {
+    const neighbors = [];
+    const { x, y } = cell;
+    const directions = [
+      { dx: 0, dy: -1 }, // Up
+      { dx: 0, dy: 1 },  // Down
+      { dx: -1, dy: 0 }, // Left
+      { dx: 1, dy: 0 }   // Right
+    ];
+    for (const dir of directions) {
+      const nx = x + dir.dx;
+      const ny = y + dir.dy;
+      if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+        neighbors.push(this.grid[ny][nx]);
+      }
+    }
+    return neighbors;
+  }
+  
+  checkDeadlock() {
+    // Build wait-for graph only for player-controlled bots (player1/player2)
+    const waitGraph = {};
+    for (const bot of this.bots) {
+      if ((bot.controlType === 'player1' || bot.controlType === 'player2') && bot.waitingFor && bot.heldResources.length > 0) {
+        const holder = bot.waitingFor.heldBy;
+        if (holder && (holder.controlType === 'player1' || holder.controlType === 'player2')) {
+          waitGraph[bot.id] = holder.id;
+        }
+      }
+    }
+
+    // Detect cycles using DFS on the directed waitGraph
+    const graph = {};
+    for (const k in waitGraph) graph[k] = [String(waitGraph[k])];
+
+    const visited = new Set();
+    const stack = new Set();
+    let hasCycle = false;
+    const dfs = (node) => {
+      if (hasCycle) return;
+      visited.add(node);
+      stack.add(node);
+      const neighbors = graph[node] || [];
+      for (const n of neighbors) {
+        if (!visited.has(n)) dfs(n);
+        else if (stack.has(n)) { hasCycle = true; return; }
+      }
+      stack.delete(node);
+    };
+
+    for (const n in graph) {
+      if (!visited.has(n)) dfs(n);
+      if (hasCycle) break;
+    }
+
+    if (hasCycle) {
+      // record detection time; do not immediately halt — wait for a short grace period
+      if (!this.deadlockDetectedAt) this.deadlockDetectedAt = performance.now();
+    } else {
+      this.deadlockDetectedAt = null;
+    }
+  }
+
+  triggerGameOver() {
+    this.state = 'gameover';
+    this.showGameOver();
+  }
+  showGameOver() {
+    this.gameOverOverlay = new PIXI.Graphics();
+    this.gameOverOverlay.beginFill(0x1a0a0a,0.96);
+    this.gameOverOverlay.drawRect(0,0,app.renderer.width,app.renderer.height);
+    this.gameOverOverlay.endFill();
+    this.uiContainer.addChild(this.gameOverOverlay);
+    this.gameOverText = new PIXI.Text('SYSTEM HALTED\nDEADLOCK DETECTED!', {fontFamily:'monospace', fontWeight:'bold', fontSize:44, fill:0xff4444, align:'center'});
+    this.gameOverText.anchor.set(0.5,0);
+    this.gameOverText.x = app.renderer.width/2;
+    this.gameOverText.y = 110;
+    this.uiContainer.addChild(this.gameOverText);
+    const scoretxt = new PIXI.Text('Final Score: '+this.score, {fontFamily:'monospace', fontSize:28, fill:0xffffff});
+    scoretxt.anchor.set(0.5,0);
+    scoretxt.x = app.renderer.width/2;
+    scoretxt.y = 230;
+    this.uiContainer.addChild(scoretxt);
+    this.restartButton = new PIXI.Graphics();
+    this.restartButton.beginFill(0x2aff6d);
+    this.restartButton.drawRoundedRect(0,0,220,54,16);
+    this.restartButton.endFill();
+    this.restartButton.x = app.renderer.width/2-110;
+    this.restartButton.y = 320;
+    this.restartButton.eventMode = 'static';
+    this.restartButton.cursor = 'pointer';
+    this.uiContainer.addChild(this.restartButton);
+    const rtxt = new PIXI.Text('RESTART (R)', {fontFamily:'monospace', fontSize:26, fill:0x222222});
+    rtxt.anchor.set(0.5);
+    rtxt.x = app.renderer.width/2;
+    rtxt.y = 347;
+    this.uiContainer.addChild(rtxt);
+    this.restartButton.on('pointerdown', ()=>this.restartGame());
+  }
+  
+  
+      tryMove(bot, dx, dy){
+        // If the bot is already waiting, ignore additional move attempts (they stay frozen)
+        if(bot.waitingFor) return;
+
+        const nx = bot.cell.x + dx, ny = bot.cell.y + dy;
+        if(nx<0||ny<0||nx>=GRID_SIZE||ny>=GRID_SIZE) return;
+        const target = this.grid[ny][nx];
+
+        // cannot step on another bot normally; but attempting to move into a bot's cell should be considered
+        // as attempting to take the resource that bot holds (if any). We handle that as a potential wait.
+        if(target.bot){
+          const holder = target.bot;
+          // only players create persistent waits for players-only deadlocks
+          if((bot.controlType==='player1' || bot.controlType==='player2') && bot.heldResources.length>0){
+            // require the holder to be a player and to hold at least one resource of a different type
+            if(holder && (holder.controlType==='player1' || holder.controlType==='player2') && holder.heldResources.length>0){
+              const heldKey = bot.heldResources[0].type.key;
+              // pick a resource from holder that is not the same type as bot currently holds (the one bot wants)
+              const desired = holder.heldResources.find(r => r.type.key !== heldKey) || holder.heldResources[0];
+              if(desired){
+                bot.waitCounter = (bot.waitCounter||0) + 1;
+                if(bot.waitCounter >= 3){
+                  bot.waitingFor = desired;
+                  bot.waitingSince = performance.now();
+                  bot.waitCounter = 0;
+                }
+                return; // do not move into the occupied cell
+              }
+            }
+          }
+          // otherwise, just reset counter and don't move into another bot's cell
+          bot.waitCounter = 0;
+          return;
+        }
+
+        // If the target cell contains a resource that is currently held by someone else (resource on cell but marked held)
+        if(target.resource && target.resource.heldBy){
+          if(bot.controlType==='player1' || bot.controlType==='player2'){
+            if(bot.heldResources.length>0){
+              const heldKey = bot.heldResources[0].type.key;
+              const holder = target.resource.heldBy;
+              if(holder && (holder.controlType==='player1' || holder.controlType==='player2')){
+                // only wait if holder has a resource of a different type (matching-target)
+                if(holder.heldResources.find(r => r.type.key !== heldKey)){
+                  bot.waitCounter = (bot.waitCounter||0) + 1;
+                  if(bot.waitCounter >= 3){
+                    bot.waitingFor = target.resource;
+                    bot.waitingSince = performance.now();
+                    bot.waitCounter = 0;
+                  }
+                  return;
+                }
+              }
+            }
+          }
+          bot.waitCounter = 0;
+          return;
+        }
+
+        // If there's a free resource in the target cell -> move (and pick it up)
+        if(target.resource && !target.resource.heldBy){
+          this.moveBot(bot, target);
+          return;
+        }
+
+        // empty cell: move
+        this.moveBot(bot, target);
+      }
+
+
+
+  restartGame() {
+    this.uiContainer.removeChildren();
+    this.gridContainer.removeChildren();
+    this.resourceContainer.removeChildren();
+    this.botContainer.removeChildren();
+    this.grid = [];
+    this.resources = [];
+    this.bots = [];
+    this.botMoveTimer = 0;
+    this.resourceSpawnTimer = 0;
+    this.selectedBot = null;
+    this.preemptionActive = false;
+    this.preemptionCooldown = 0;
+    this.processingBots = [];
+    this.state = 'play';
+    this.deadlockDetectedAt = null;
+    this.setupGrid();
+    this.setupResources();
+    this.setupBots();
+    this.setupUI();
+    this.setupOwnershipGraph();
+    this.setupEvents();
+    this.updateOwnershipGraph();
+  }
+}
+const app = new PIXI.Application({
+  width: 900,
+  height: 600,
+  backgroundColor: 0x181826,
+  antialias: true,
+  resolution: 1
+});
+document.body.appendChild(app.view);
+let game = new Game();
+app.ticker.add((delta) => {
+  game.update(delta);
+});
+    
+
+</script>
+

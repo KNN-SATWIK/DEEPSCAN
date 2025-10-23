@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: "jdbc:mysql://localhost:3306/deepscan?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+    username: "deepscan_user"
+    password: "password123"
+    driver-class-name: "com.mysql.cj.jdbc.Driver"
+  jpa:
+    database-platform: "org.hibernate.dialect.MySQL8Dialect"
+    hibernate:
+      ddl-auto: "update"
+    show-sql: true
+
+server:
+  port: 8080
+
+tor:
+  proxy:
+    host: "127.0.0.1"
+    port: 9050
+  enabled: false
+
+hibp:
+  api:
+    base-url: "https://api.pwnedpasswords.com"
+    rate-limit-delay: 1600
+
+logging:
+  level:
+    com.deepscan: INFO
+
+
+
+
+    
